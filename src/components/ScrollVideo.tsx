@@ -11,12 +11,14 @@ const isSmallScreen = (): boolean => {
 
 export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const placeholderVideoRef = useRef<HTMLVideoElement | null>(null);
   const targetScrollRef = useRef<number>(0);
   const lastDrawnFrameIndexRef = useRef<number>(-1);
 
-  const [frames, setFrames] = useState<ImageBitmap[]>([]);
+  // Frames live in a ref so growing the set never re-runs the render loop (no jumps)
+  const framesRef = useRef<ImageBitmap[]>([]);
   const [framesReady, setFramesReady] = useState<boolean>(false);
+  // Last-resort background if extraction fails entirely (rare, local video)
+  const [rawFallback, setRawFallback] = useState<boolean>(false);
 
   // Loading screen — fades out the instant the background is displayable
   const [showLoader, setShowLoader] = useState<boolean>(true);
@@ -33,6 +35,7 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
   // Draw a frame with 'cover' sizing arithmetic
   const drawFrame = (index: number) => {
     const canvas = canvasRef.current;
+    const frames = framesRef.current;
     if (!canvas || frames.length === 0) return;
 
     const frame = frames[index];
@@ -159,6 +162,16 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
         });
 
         const activeExtracted: ImageBitmap[] = [];
+        // Enough frames to scrub fluidly → we can enter scroll mode without
+        // waiting for the full set. Never a looping placeholder.
+        const revealThreshold = Math.min(frameCount, small ? 24 : 30);
+
+        const publish = () => {
+          framesRef.current = activeExtracted;
+          lastDrawnFrameIndexRef.current = -1; // force redraw at new resolution
+        };
+
+        let revealed = false;
         for (let i = 0; i < frameCount; i++) {
           if (isCancelled) break;
           await seekTo(video, times[i]);
@@ -171,6 +184,17 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
           } catch (e) {
             console.error('Frame capture error:', e);
           }
+
+          if (!revealed && activeExtracted.length >= revealThreshold) {
+            // Scroll mode is live from here — fluid, driven by scroll, never looping
+            revealed = true;
+            extractedBitmaps = activeExtracted;
+            publish();
+            setFramesReady(true);
+            dismissLoader();
+          } else if (revealed && activeExtracted.length % 8 === 0) {
+            publish(); // keep refining resolution as more frames arrive
+          }
         }
 
         if (isCancelled) {
@@ -179,10 +203,15 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
         }
 
         extractedBitmaps = activeExtracted;
-        setFrames([...activeExtracted]);
+        publish();
         setFramesReady(true);
+        dismissLoader();
       } catch (err) {
         console.warn('Frame pre-extraction failed:', err);
+        if (!isCancelled) {
+          setRawFallback(true);
+          dismissLoader();
+        }
       }
     };
 
@@ -207,11 +236,9 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
         smoothed = target;
       }
 
-      if (framesReady && frames.length > 0) {
-        const frameIndex = Math.max(
-          0,
-          Math.min(frames.length - 1, Math.round(smoothed * (frames.length - 1)))
-        );
+      const len = framesRef.current.length;
+      if (framesReady && len > 0) {
+        const frameIndex = Math.max(0, Math.min(len - 1, Math.round(smoothed * (len - 1))));
         if (frameIndex !== lastDrawnFrameIndexRef.current) {
           drawFrame(frameIndex);
           lastDrawnFrameIndexRef.current = frameIndex;
@@ -226,53 +253,41 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
     return () => {
       cancelAnimationFrame(rAFId);
     };
-  }, [framesReady, frames]);
+  }, [framesReady]);
 
   // Redraw on resize so the 'cover' math stays correct
   useEffect(() => {
     const handleResize = () => {
-      if (framesReady && frames.length > 0 && lastDrawnFrameIndexRef.current !== -1) {
-        drawFrame(lastDrawnFrameIndexRef.current);
+      if (framesReady && framesRef.current.length > 0) {
+        lastDrawnFrameIndexRef.current = -1; // force a fresh draw at the new size
       }
     };
     window.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [framesReady, frames]);
+  }, [framesReady]);
 
   // Hide the loader as soon as the canvas has something to show
   useEffect(() => {
     if (framesReady) dismissLoader();
   }, [framesReady]);
 
-  // Safety net: never trap the visitor behind the loader for more than 5s
+  // Safety net: if extraction is unusually slow, don't trap the visitor behind
+  // the loader — reveal a plain video background rather than a black screen.
   useEffect(() => {
-    const safety = window.setTimeout(dismissLoader, 5000);
+    const safety = window.setTimeout(() => {
+      if (!framesReady) setRawFallback(true);
+      dismissLoader();
+    }, 7000);
     return () => window.clearTimeout(safety);
-  }, []);
+  }, [framesReady]);
 
   return (
     <>
       <div id="scroll-video-container" className="fixed inset-0 -z-10 bg-[#0a0a0a]">
-        {/* Placeholder loop shown ONLY until the first extracted frame is ready —
-            keeps the background alive (never black) during the brief decode. */}
-        {!framesReady && (
-          <video
-            id="scroll-video-placeholder"
-            ref={placeholderVideoRef}
-            src={videoUrl}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="auto"
-            onLoadedData={dismissLoader}
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-        )}
-
-        {/* Scroll-scrubbed canvas — the real experience, fluid on every device */}
+        {/* Scroll-scrubbed canvas — the real experience, fluid on every device,
+            in scroll mode from the very first paint (never a looping placeholder) */}
         {framesReady && (
           <canvas
             id="scroll-video-canvas"
@@ -281,8 +296,25 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
           />
         )}
 
-        {/* Aesthetic black overlay for text readability and contrast */}
-        <div id="scroll-video-overlay" className="absolute inset-0 bg-black/20" />
+        {/* Last-resort background only if frame extraction failed entirely (rare) */}
+        {rawFallback && !framesReady && (
+          <video
+            id="scroll-video-fallback"
+            src={videoUrl}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
+
+        {/* Darkened scrim — keeps text readable over bright video frames (mobile) */}
+        <div
+          id="scroll-video-overlay"
+          className="absolute inset-0 bg-black/45 sm:bg-black/35"
+        />
       </div>
 
       {/* Elegant loading screen — covers the initial decode, then fades away */}

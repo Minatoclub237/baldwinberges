@@ -30,7 +30,7 @@ export default function SectionFour() {
               <span className="text-lg">{t.sectionFour.markerLabel}</span>
               <span className="text-xs text-white/70">{t.sectionFour.markerIndex}</span>
             </div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/45">
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/70">
               {t.sectionFour.markerValue}
             </div>
           </div>

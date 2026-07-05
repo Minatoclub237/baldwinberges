@@ -46,7 +46,7 @@ export default function SectionThree() {
               <span className="text-lg">{t.sectionThree.markerLabel}</span>
               <span className="text-xs text-white/70">{t.sectionThree.markerIndex}</span>
             </div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/45">
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/70">
               {t.sectionThree.markerValue}
             </div>
           </div>
@@ -58,10 +58,14 @@ export default function SectionThree() {
         <div className="grid grid-cols-1 gap-px overflow-hidden sm:grid-cols-3">
           {pillars.map((p, i) => (
             <Reveal key={p.n} delay={420 + i * 120}>
-              <div className="flex h-full flex-col gap-4 border-t border-white/15 pt-5 sm:pr-8">
-                <span className="font-mono text-xs text-white/40">{p.n}</span>
-                <h3 className="font-mono text-base uppercase tracking-wide text-white">{p.title}</h3>
-                <p className="text-sm leading-relaxed text-white/70">{p.text}</p>
+              <div className="flex h-full flex-col gap-3 border-t border-white/30 pt-5 sm:pr-8">
+                <span className="font-mono text-xs text-white/60">{p.n}</span>
+                <h3 className="font-mono text-lg font-bold uppercase tracking-wide text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+                  {p.title}
+                </h3>
+                <p className="text-sm font-medium leading-relaxed text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]">
+                  {p.text}
+                </p>
               </div>
             </Reveal>
           ))}

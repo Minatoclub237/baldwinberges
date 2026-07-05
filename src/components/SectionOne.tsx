@@ -54,7 +54,7 @@ export default function SectionOne() {
               <span className="text-lg">{t.sectionOne.markerLabel}</span>
               <span className="text-xs text-white/70">{t.sectionOne.markerIndex}</span>
             </div>
-            <div className="mb-6 font-mono text-[10px] uppercase tracking-[0.2em] text-white/45 sm:mb-8">
+            <div className="mb-6 font-mono text-[10px] uppercase tracking-[0.2em] text-white/70 sm:mb-8">
               {t.sectionOne.markerValue}
             </div>
           </Reveal>
