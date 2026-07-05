@@ -5,7 +5,7 @@ import Reveal from './Reveal';
 export default function Navbar() {
   const { language, setLanguage, t } = useLanguage();
 
-  const handleNavClick = (linkKey: 'main' | 'tiers' | 'talkToUs') => {
+  const handleNavClick = (linkKey: 'main' | 'tiers' | 'features' | 'talkToUs') => {
     if (linkKey === 'main') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
@@ -19,6 +19,7 @@ export default function Navbar() {
   const navItems = [
     { key: 'main', label: t.nav.main },
     { key: 'tiers', label: t.nav.tiers },
+    { key: 'features', label: t.nav.features },
     { key: 'talkToUs', label: t.nav.talkToUs },
   ] as const;
 
