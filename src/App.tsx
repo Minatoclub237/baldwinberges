@@ -10,7 +10,8 @@ import SectionTwo from './components/SectionTwo';
 import { LanguageProvider } from './context/LanguageContext';
 
 export default function App() {
-  const videoUrl = 'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260611_104107_121bfb5a-b1df-4e0d-8240-25b81f7cc85d.mp4';
+  // Vidéo hébergée localement (dossier /public) — permanente, plus de lien CloudFront temporaire
+  const videoUrl = '/background.mp4';
 
   return (
     <LanguageProvider>
