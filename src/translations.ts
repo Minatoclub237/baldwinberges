@@ -56,6 +56,12 @@ export interface TranslationSet {
     email: string;
     cta: string;
   };
+  portrait: {
+    quote: string;
+    name: string;
+    role: string;
+    alt: string;
+  };
   actions: {
     copied: string;
     share: string;
@@ -122,6 +128,12 @@ export const translations: Record<'fr' | 'en', TranslationSet> = {
       email: 'baldwin@baldwinberges.com',
       cta: 'Me Contacter',
     },
+    portrait: {
+      quote: 'Je me concentre sur les technologies et les investissements qui permettent de résoudre nos problèmes mondiaux.',
+      name: 'Baldwin Berges',
+      role: '[ INVESTISSEUR & PROMOTEUR ]',
+      alt: 'Portrait de Baldwin Berges',
+    },
     actions: {
       copied: 'COPIÉ',
       share: 'Partager',
@@ -185,6 +197,12 @@ export const translations: Record<'fr' | 'en', TranslationSet> = {
       paragraph: "Working on a high-impact project? Let's talk about how capital and expertise can accelerate it.",
       email: 'baldwin@baldwinberges.com',
       cta: 'Connect With Me',
+    },
+    portrait: {
+      quote: 'I focus on the technologies and investments that help solve our global challenges.',
+      name: 'Baldwin Berges',
+      role: '[ INVESTOR & DEVELOPER ]',
+      alt: 'Portrait of Baldwin Berges',
     },
     actions: {
       copied: 'COPIED',
