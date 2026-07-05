@@ -4,33 +4,21 @@ interface ScrollVideoProps {
   videoUrl: string;
 }
 
-// Mobile / touch devices can't reliably paint a <video> that is only seeked
-// (never played), and createImageBitmap frame extraction is unsupported on many
-// mobile browsers. On those devices we fall back to a plain autoplaying loop.
-const detectMobile = (): boolean => {
+const isSmallScreen = (): boolean => {
   if (typeof window === 'undefined') return false;
-  const coarsePointer =
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(pointer: coarse)').matches;
-  return coarsePointer || window.innerWidth < 768;
+  return window.innerWidth < 768;
 };
 
 export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const fallbackVideoRef = useRef<HTMLVideoElement | null>(null);
-  const mobileVideoRef = useRef<HTMLVideoElement | null>(null);
+  const placeholderVideoRef = useRef<HTMLVideoElement | null>(null);
   const targetScrollRef = useRef<number>(0);
   const lastDrawnFrameIndexRef = useRef<number>(-1);
-  const seekingRef = useRef<boolean>(false);
 
   const [frames, setFrames] = useState<ImageBitmap[]>([]);
   const [framesReady, setFramesReady] = useState<boolean>(false);
-  const [videoDuration, setVideoDuration] = useState<number>(0);
 
-  // Decide the rendering strategy once, on mount.
-  const [isMobile] = useState<boolean>(() => detectMobile());
-
-  // Loading screen — fades out the instant the video can display its first frame
+  // Loading screen — fades out the instant the background is displayable
   const [showLoader, setShowLoader] = useState<boolean>(true);
   const [fadeLoader, setFadeLoader] = useState<boolean>(false);
 
@@ -53,13 +41,11 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Get current client layout size
     const rect = canvas.getBoundingClientRect();
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const width = rect.width * dpr;
     const height = rect.height * dpr;
 
-    // Resize canvas buffer if necessary
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;
@@ -80,29 +66,8 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
     ctx.drawImage(frame, dx, dy, drawWidth, drawHeight);
   };
 
-  // On mobile: force muted + kick off autoplay imperatively (most reliable).
+  // Passive scroll progress calculator (0 → 1)
   useEffect(() => {
-    if (!isMobile) return;
-    const video = mobileVideoRef.current;
-    if (!video) return;
-    video.muted = true;
-    const tryPlay = () => {
-      const p = video.play();
-      if (p && typeof p.catch === 'function') {
-        p.catch(() => {
-          /* autoplay blocked — first frame still shows via preload */
-        });
-      }
-    };
-    tryPlay();
-    // Retry once the browser reports it can play, in case the first call was too early
-    video.addEventListener('canplay', tryPlay, { once: true });
-    return () => video.removeEventListener('canplay', tryPlay);
-  }, [isMobile]);
-
-  // Passive scroll progress calculator (desktop scrub only)
-  useEffect(() => {
-    if (isMobile) return;
     const handleScroll = () => {
       const scrollHeight = document.documentElement.scrollHeight;
       const innerHeight = window.innerHeight;
@@ -116,54 +81,78 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
     return () => {
       window.removeEventListener('scroll', handleScroll);
     };
-  }, [isMobile]);
+  }, []);
 
-  // Frame pre-extractor with cancellation support (desktop only)
+  // Frame pre-extractor — decodes the video into ImageBitmaps once, so scrubbing
+  // is buttery smooth on EVERY device (canvas paints reliably, unlike seeking a
+  // raw <video> which is black on mobile). Robust for iOS/Android.
   useEffect(() => {
-    if (isMobile) return;
     let isCancelled = false;
     let extractedBitmaps: ImageBitmap[] = [];
-    let objectUrl = '';
+
+    const seekTo = (video: HTMLVideoElement, time: number) =>
+      new Promise<void>((resolve) => {
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          video.removeEventListener('seeked', done);
+          resolve();
+        };
+        video.addEventListener('seeked', done);
+        // Safety: never hang forever on a stuck seek
+        window.setTimeout(done, 400);
+        video.currentTime = time;
+      });
 
     const extractFrames = async () => {
       try {
-        const response = await fetch(videoUrl);
-        if (!response.ok) throw new Error('Fetch failed for scroll video');
-        const blob = await response.blob();
-        if (isCancelled) return;
-
-        objectUrl = URL.createObjectURL(blob);
         const video = document.createElement('video');
+        video.src = videoUrl; // same-origin → no CORS taint, direct decode
         video.muted = true;
+        video.defaultMuted = true;
         video.playsInline = true;
+        (video as any).crossOrigin = 'anonymous';
         video.preload = 'auto';
-        video.src = objectUrl;
 
         await new Promise<void>((resolve, reject) => {
           video.onloadedmetadata = () => resolve();
           video.onerror = (e) => reject(e);
         });
+        if (isCancelled) return;
 
-        if (isCancelled) {
-          URL.revokeObjectURL(objectUrl);
-          return;
+        // iOS needs the pipeline "primed" with a play() before frames decode on seek
+        try {
+          await video.play();
+          video.pause();
+        } catch {
+          /* muted inline play is allowed; ignore if blocked */
         }
 
-        const duration = video.duration;
-        setVideoDuration(duration);
+        const duration = video.duration || 5;
+        const small = isSmallScreen();
 
-        // Clamp frames: Duration * 24 frames/sec, bounded between 30 and 120
-        const frameCount = Math.min(Math.max(Math.round(duration * 24), 30), 120);
+        // Fewer, lighter frames on phones = faster ready + smooth enough after smoothing
+        const maxFrames = small ? 60 : 120;
+        const frameCount = Math.min(Math.max(Math.round(duration * 24), 30), maxFrames);
 
-        // Compute scaling logic (max width 1280)
-        const vWidth = video.videoWidth;
-        const vHeight = video.videoHeight;
+        const maxWidth = small ? 720 : 1280;
+        const vWidth = video.videoWidth || maxWidth;
+        const vHeight = video.videoHeight || Math.round((maxWidth * 9) / 16);
         let targetWidth = vWidth;
         let targetHeight = vHeight;
-        if (vWidth > 1280) {
-          targetWidth = 1280;
-          targetHeight = Math.round((vHeight * 1280) / vWidth);
+        if (vWidth > maxWidth) {
+          targetWidth = maxWidth;
+          targetHeight = Math.round((vHeight * maxWidth) / vWidth);
         }
+
+        // Offscreen canvas capture works on every browser (unlike createImageBitmap
+        // resize options, which are patchy on Safari)
+        const off = document.createElement('canvas');
+        off.width = targetWidth;
+        off.height = targetHeight;
+        const octx = off.getContext('2d');
+        if (!octx) throw new Error('No 2D context for extraction');
 
         const times = Array.from({ length: frameCount }, (_, i) => {
           return (i / (frameCount - 1)) * (duration - 0.05);
@@ -172,27 +161,15 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
         const activeExtracted: ImageBitmap[] = [];
         for (let i = 0; i < frameCount; i++) {
           if (isCancelled) break;
-          video.currentTime = times[i];
-
-          await new Promise<void>((resolve) => {
-            const onSeeked = () => {
-              video.removeEventListener('seeked', onSeeked);
-              resolve();
-            };
-            video.addEventListener('seeked', onSeeked);
-          });
-
+          await seekTo(video, times[i]);
           if (isCancelled) break;
 
           try {
-            const bitmap = await createImageBitmap(video, {
-              resizeWidth: targetWidth,
-              resizeHeight: targetHeight,
-              resizeQuality: 'medium',
-            });
+            octx.drawImage(video, 0, 0, targetWidth, targetHeight);
+            const bitmap = await createImageBitmap(off);
             activeExtracted.push(bitmap);
           } catch (e) {
-            console.error('Frame creation error:', e);
+            console.error('Frame capture error:', e);
           }
         }
 
@@ -202,10 +179,10 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
         }
 
         extractedBitmaps = activeExtracted;
-        setFrames(activeExtracted);
+        setFrames([...activeExtracted]);
         setFramesReady(true);
       } catch (err) {
-        console.warn('Bitmaps pre-extraction failed, using fallback video seek:', err);
+        console.warn('Frame pre-extraction failed:', err);
       }
     };
 
@@ -213,45 +190,31 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
 
     return () => {
       isCancelled = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
       extractedBitmaps.forEach((b) => b.close());
     };
-  }, [videoUrl, isMobile]);
+  }, [videoUrl]);
 
-  // RequestAnimationFrame loop for smoothed progress mapping (desktop scrub only)
+  // RequestAnimationFrame loop — smoothed scroll → frame index (the "fluid" part)
   useEffect(() => {
-    if (isMobile) return;
     let rAFId: number;
     let smoothed = 0;
 
     const tick = () => {
       const target = targetScrollRef.current;
-      smoothed += (target - smoothed) * 0.1;
+      smoothed += (target - smoothed) * 0.12;
 
-      // Snapping edge conditions
       if (Math.abs(target - smoothed) < 0.0001) {
         smoothed = target;
       }
 
-      const activeDuration = videoDuration || 5;
-      const targetTime = smoothed * activeDuration;
-
       if (framesReady && frames.length > 0) {
-        const frameIndex = Math.max(0, Math.min(frames.length - 1, Math.round(smoothed * (frames.length - 1))));
+        const frameIndex = Math.max(
+          0,
+          Math.min(frames.length - 1, Math.round(smoothed * (frames.length - 1)))
+        );
         if (frameIndex !== lastDrawnFrameIndexRef.current) {
           drawFrame(frameIndex);
           lastDrawnFrameIndexRef.current = frameIndex;
-        }
-      } else {
-        const fallbackVideo = fallbackVideoRef.current;
-        if (fallbackVideo) {
-          const delta = Math.abs(fallbackVideo.currentTime - targetTime);
-          if (delta > 0.001 && !seekingRef.current) {
-            seekingRef.current = true;
-            fallbackVideo.currentTime = targetTime;
-          }
         }
       }
 
@@ -263,11 +226,10 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
     return () => {
       cancelAnimationFrame(rAFId);
     };
-  }, [framesReady, frames, videoDuration, isMobile]);
+  }, [framesReady, frames]);
 
-  // Force redraw on window resizing to handle canvas cover math updates
+  // Redraw on resize so the 'cover' math stays correct
   useEffect(() => {
-    if (isMobile) return;
     const handleResize = () => {
       if (framesReady && frames.length > 0 && lastDrawnFrameIndexRef.current !== -1) {
         drawFrame(lastDrawnFrameIndexRef.current);
@@ -277,31 +239,28 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [framesReady, frames, isMobile]);
+  }, [framesReady, frames]);
 
-  // Safety net: never trap the visitor behind the loader for more than 4s
-  useEffect(() => {
-    const safety = window.setTimeout(dismissLoader, 4000);
-    return () => window.clearTimeout(safety);
-  }, []);
-
-  // Once high-quality frames are ready, the video is definitely displayable
+  // Hide the loader as soon as the canvas has something to show
   useEffect(() => {
     if (framesReady) dismissLoader();
   }, [framesReady]);
 
-  const handleFallbackSeeked = () => {
-    seekingRef.current = false;
-  };
+  // Safety net: never trap the visitor behind the loader for more than 5s
+  useEffect(() => {
+    const safety = window.setTimeout(dismissLoader, 5000);
+    return () => window.clearTimeout(safety);
+  }, []);
 
   return (
     <>
       <div id="scroll-video-container" className="fixed inset-0 -z-10 bg-[#0a0a0a]">
-        {isMobile ? (
-          /* Mobile: plain autoplaying loop — reliably painted on iOS/Android */
+        {/* Placeholder loop shown ONLY until the first extracted frame is ready —
+            keeps the background alive (never black) during the brief decode. */}
+        {!framesReady && (
           <video
-            id="scroll-video-mobile"
-            ref={mobileVideoRef}
+            id="scroll-video-placeholder"
+            ref={placeholderVideoRef}
             src={videoUrl}
             autoPlay
             muted
@@ -309,42 +268,24 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
             playsInline
             preload="auto"
             onLoadedData={dismissLoader}
-            onCanPlay={dismissLoader}
             className="absolute inset-0 h-full w-full object-cover"
           />
-        ) : (
-          <>
-            {/* 2D Canvas for High-Performance Bitmaps Rendering */}
-            {framesReady && (
-              <canvas
-                id="scroll-video-canvas"
-                ref={canvasRef}
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-            )}
+        )}
 
-            {/* Fallback Video Tag — shown immediately so the background is alive on landing */}
-            {!framesReady && (
-              <video
-                id="scroll-video-fallback"
-                ref={fallbackVideoRef}
-                src={videoUrl}
-                muted
-                playsInline
-                preload="auto"
-                onLoadedData={dismissLoader}
-                onSeeked={handleFallbackSeeked}
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-            )}
-          </>
+        {/* Scroll-scrubbed canvas — the real experience, fluid on every device */}
+        {framesReady && (
+          <canvas
+            id="scroll-video-canvas"
+            ref={canvasRef}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
         )}
 
         {/* Aesthetic black overlay for text readability and contrast */}
         <div id="scroll-video-overlay" className="absolute inset-0 bg-black/20" />
       </div>
 
-      {/* Elegant loading screen — covers the initial frame extraction, then fades away */}
+      {/* Elegant loading screen — covers the initial decode, then fades away */}
       {showLoader && (
         <div
           id="scroll-video-loader"
