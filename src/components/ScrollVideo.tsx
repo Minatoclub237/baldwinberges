@@ -4,9 +4,21 @@ interface ScrollVideoProps {
   videoUrl: string;
 }
 
+// Mobile / touch devices can't reliably paint a <video> that is only seeked
+// (never played), and createImageBitmap frame extraction is unsupported on many
+// mobile browsers. On those devices we fall back to a plain autoplaying loop.
+const detectMobile = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const coarsePointer =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(pointer: coarse)').matches;
+  return coarsePointer || window.innerWidth < 768;
+};
+
 export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fallbackVideoRef = useRef<HTMLVideoElement | null>(null);
+  const mobileVideoRef = useRef<HTMLVideoElement | null>(null);
   const targetScrollRef = useRef<number>(0);
   const lastDrawnFrameIndexRef = useRef<number>(-1);
   const seekingRef = useRef<boolean>(false);
@@ -14,6 +26,9 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
   const [frames, setFrames] = useState<ImageBitmap[]>([]);
   const [framesReady, setFramesReady] = useState<boolean>(false);
   const [videoDuration, setVideoDuration] = useState<number>(0);
+
+  // Decide the rendering strategy once, on mount.
+  const [isMobile] = useState<boolean>(() => detectMobile());
 
   // Loading screen — fades out the instant the video can display its first frame
   const [showLoader, setShowLoader] = useState<boolean>(true);
@@ -65,8 +80,29 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
     ctx.drawImage(frame, dx, dy, drawWidth, drawHeight);
   };
 
-  // Passive scroll progress calculator
+  // On mobile: force muted + kick off autoplay imperatively (most reliable).
   useEffect(() => {
+    if (!isMobile) return;
+    const video = mobileVideoRef.current;
+    if (!video) return;
+    video.muted = true;
+    const tryPlay = () => {
+      const p = video.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {
+          /* autoplay blocked — first frame still shows via preload */
+        });
+      }
+    };
+    tryPlay();
+    // Retry once the browser reports it can play, in case the first call was too early
+    video.addEventListener('canplay', tryPlay, { once: true });
+    return () => video.removeEventListener('canplay', tryPlay);
+  }, [isMobile]);
+
+  // Passive scroll progress calculator (desktop scrub only)
+  useEffect(() => {
+    if (isMobile) return;
     const handleScroll = () => {
       const scrollHeight = document.documentElement.scrollHeight;
       const innerHeight = window.innerHeight;
@@ -80,10 +116,11 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
     return () => {
       window.removeEventListener('scroll', handleScroll);
     };
-  }, []);
+  }, [isMobile]);
 
-  // Frame pre-extractor with cancellation support
+  // Frame pre-extractor with cancellation support (desktop only)
   useEffect(() => {
+    if (isMobile) return;
     let isCancelled = false;
     let extractedBitmaps: ImageBitmap[] = [];
     let objectUrl = '';
@@ -181,10 +218,11 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
       }
       extractedBitmaps.forEach((b) => b.close());
     };
-  }, [videoUrl]);
+  }, [videoUrl, isMobile]);
 
-  // RequestAnimationFrame loop for smoothed progress mapping
+  // RequestAnimationFrame loop for smoothed progress mapping (desktop scrub only)
   useEffect(() => {
+    if (isMobile) return;
     let rAFId: number;
     let smoothed = 0;
 
@@ -225,10 +263,11 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
     return () => {
       cancelAnimationFrame(rAFId);
     };
-  }, [framesReady, frames, videoDuration]);
+  }, [framesReady, frames, videoDuration, isMobile]);
 
   // Force redraw on window resizing to handle canvas cover math updates
   useEffect(() => {
+    if (isMobile) return;
     const handleResize = () => {
       if (framesReady && frames.length > 0 && lastDrawnFrameIndexRef.current !== -1) {
         drawFrame(lastDrawnFrameIndexRef.current);
@@ -238,7 +277,7 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [framesReady, frames]);
+  }, [framesReady, frames, isMobile]);
 
   // Safety net: never trap the visitor behind the loader for more than 4s
   useEffect(() => {
@@ -258,28 +297,47 @@ export default function ScrollVideo({ videoUrl }: ScrollVideoProps) {
   return (
     <>
       <div id="scroll-video-container" className="fixed inset-0 -z-10 bg-[#0a0a0a]">
-        {/* 2D Canvas for High-Performance Bitmaps Rendering */}
-        {framesReady && (
-          <canvas
-            id="scroll-video-canvas"
-            ref={canvasRef}
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-        )}
-
-        {/* Fallback Video Tag — shown immediately so the background is alive on landing */}
-        {!framesReady && (
+        {isMobile ? (
+          /* Mobile: plain autoplaying loop — reliably painted on iOS/Android */
           <video
-            id="scroll-video-fallback"
-            ref={fallbackVideoRef}
+            id="scroll-video-mobile"
+            ref={mobileVideoRef}
             src={videoUrl}
+            autoPlay
             muted
+            loop
             playsInline
             preload="auto"
             onLoadedData={dismissLoader}
-            onSeeked={handleFallbackSeeked}
+            onCanPlay={dismissLoader}
             className="absolute inset-0 h-full w-full object-cover"
           />
+        ) : (
+          <>
+            {/* 2D Canvas for High-Performance Bitmaps Rendering */}
+            {framesReady && (
+              <canvas
+                id="scroll-video-canvas"
+                ref={canvasRef}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            )}
+
+            {/* Fallback Video Tag — shown immediately so the background is alive on landing */}
+            {!framesReady && (
+              <video
+                id="scroll-video-fallback"
+                ref={fallbackVideoRef}
+                src={videoUrl}
+                muted
+                playsInline
+                preload="auto"
+                onLoadedData={dismissLoader}
+                onSeeked={handleFallbackSeeked}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            )}
+          </>
         )}
 
         {/* Aesthetic black overlay for text readability and contrast */}
