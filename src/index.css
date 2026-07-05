@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Flexo Soft Medium", system-ui, sans-serif;
+  --font-mono: "Flexo Soft Medium", system-ui, sans-serif;
+}
+
+body {
+  font-family: 'Flexo Soft Medium', system-ui, sans-serif;
+  background-color: #0a0a0a;
+  color: #fff;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Keyboard accessibility — visible focus ring only for keyboard users */
+:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline-offset: 4px;
+  border-radius: 3px;
+}
+
+/* Mouse clicks should not show the ring */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .animate-bounce-center {
+    animation: none !important;
+  }
+}
+
+/* Elegant loader fade-out */
+@keyframes loader-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.animate-loader-pulse {
+  animation: loader-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes bounce-center {
+  0%, 100% {
+    transform: translateY(-25%) translateX(-50%);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+  50% {
+    transform: translateY(0) translateX(-50%);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+
+.animate-bounce-center {
+  animation: bounce-center 1s infinite;
+}
+
