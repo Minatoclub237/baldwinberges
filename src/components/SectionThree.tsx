@@ -3,7 +3,7 @@ import { Share2, Check } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import Reveal from './Reveal';
 
-export default function SectionTwo() {
+export default function SectionThree() {
   const { t } = useLanguage();
   const [copied, setCopied] = useState<boolean>(false);
 
@@ -17,59 +17,76 @@ export default function SectionTwo() {
     }
   };
 
+  const pillars = [
+    { n: '01', title: t.sectionThree.pillar1Title, text: t.sectionThree.pillar1Text },
+    { n: '02', title: t.sectionThree.pillar2Title, text: t.sectionThree.pillar2Text },
+    { n: '03', title: t.sectionThree.pillar3Title, text: t.sectionThree.pillar3Text },
+  ];
+
   return (
     <section
-      id="section-two"
+      id="section-three"
       className="relative flex min-h-screen flex-col supports-[height:100svh]:min-h-[100svh]"
     >
-      {/* Middle content block */}
-      <div className="relative flex flex-1 flex-col justify-center gap-10 px-5 pt-24 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:px-8 sm:pt-0 md:px-12">
-        
-        {/* Left Headline */}
+      {/* Top block — headline + marker */}
+      <div className="relative flex flex-col justify-center gap-10 px-5 pt-24 sm:flex-row sm:items-start sm:justify-between sm:gap-8 sm:px-8 sm:pt-32 md:px-12">
         <h2 className="max-w-sm text-4xl font-medium uppercase leading-[1.05] tracking-tight text-white drop-shadow-lg sm:text-5xl md:text-6xl">
           <Reveal delay={100} className="block">
-            {t.sectionTwo.headingLine1Text} <span className="font-light normal-case italic">{t.sectionTwo.headingLine1Italic}</span>
+            {t.sectionThree.headingLine1Text}{' '}
+            <span className="font-light normal-case italic">{t.sectionThree.headingLine1Italic}</span>
           </Reveal>
           <Reveal delay={220} className="block">
-            {t.sectionTwo.headingLine2}
+            {t.sectionThree.headingLine2}
           </Reveal>
         </h2>
 
-        {/* Right Labeling metadata */}
         <Reveal delay={340}>
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between font-mono text-white sm:justify-start sm:gap-16 md:gap-24">
-              <span className="text-lg">{t.sectionTwo.markerLabel}</span>
-              <span className="text-xs text-white/70">{t.sectionTwo.markerIndex}</span>
+              <span className="text-lg">{t.sectionThree.markerLabel}</span>
+              <span className="text-xs text-white/70">{t.sectionThree.markerIndex}</span>
             </div>
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/45">
-              {t.sectionTwo.markerValue}
+              {t.sectionThree.markerValue}
             </div>
           </div>
         </Reveal>
       </div>
 
-      {/* Bottom info and Call-to-Action block */}
+      {/* Pillars grid */}
+      <div className="relative flex flex-1 flex-col justify-center px-5 py-16 sm:px-8 md:px-12">
+        <div className="grid grid-cols-1 gap-px overflow-hidden sm:grid-cols-3">
+          {pillars.map((p, i) => (
+            <Reveal key={p.n} delay={420 + i * 120}>
+              <div className="flex h-full flex-col gap-4 border-t border-white/15 pt-5 sm:pr-8">
+                <span className="font-mono text-xs text-white/40">{p.n}</span>
+                <h3 className="font-mono text-base uppercase tracking-wide text-white">{p.title}</h3>
+                <p className="text-sm leading-relaxed text-white/70">{p.text}</p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+
+      {/* Bottom block — supporting copy + CTA */}
       <div className="relative flex flex-col gap-10 px-5 pb-16 sm:px-8 md:px-12 md:pb-20">
-        
-        {/* Supporting description copy */}
         <Reveal delay={460}>
           <p className="max-w-xs text-sm leading-relaxed text-white/85 drop-shadow-md">
-            {t.sectionTwo.paragraph}
+            {t.sectionThree.paragraph}
           </p>
         </Reveal>
 
-        {/* CTA — scrolls down to the Impact section (003) */}
+        {/* CTA — scrolls down to the Contact section (004) */}
         <Reveal delay={580} className="w-full max-w-xs sm:absolute sm:bottom-16 sm:left-1/2 sm:w-auto sm:max-w-none sm:-translate-x-1/2 md:bottom-20">
           <a
-            href="#section-three"
+            href="#section-four"
             onClick={(e) => {
               e.preventDefault();
-              document.getElementById('section-three')?.scrollIntoView({ behavior: 'smooth' });
+              document.getElementById('section-four')?.scrollIntoView({ behavior: 'smooth' });
             }}
             className="block rounded-full border border-white/60 px-10 py-3 text-center font-mono text-xs uppercase tracking-[0.15em] text-white transition-all duration-300 hover:bg-white hover:text-black"
           >
-            {t.sectionTwo.cta}
+            {t.sectionThree.cta}
           </a>
         </Reveal>
       </div>

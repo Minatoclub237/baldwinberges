@@ -8,12 +8,14 @@ export default function Navbar() {
   const handleNavClick = (linkKey: 'main' | 'tiers' | 'features' | 'talkToUs') => {
     if (linkKey === 'main') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      const sectionTwo = document.getElementById('section-two');
-      if (sectionTwo) {
-        sectionTwo.scrollIntoView({ behavior: 'smooth' });
-      }
+      return;
     }
+    const targetId = {
+      tiers: 'section-two',
+      features: 'section-three',
+      talkToUs: 'section-four',
+    }[linkKey];
+    document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const navItems = [

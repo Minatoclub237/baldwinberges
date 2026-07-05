@@ -50,9 +50,12 @@ export default function SectionOne() {
         {/* Right Column - Secondary Hero Narrative & Call-To-Action */}
         <div className="flex w-full max-w-xs flex-col items-start">
           <Reveal delay={400} className="w-full">
-            <div className="mb-6 flex w-full items-center justify-between font-mono text-white sm:mb-8">
+            <div className="mb-2 flex w-full items-center justify-between font-mono text-white">
               <span className="text-lg">{t.sectionOne.markerLabel}</span>
-              <span className="text-xs text-white/70">{t.sectionOne.markerValue}</span>
+              <span className="text-xs text-white/70">{t.sectionOne.markerIndex}</span>
+            </div>
+            <div className="mb-6 font-mono text-[10px] uppercase tracking-[0.2em] text-white/45 sm:mb-8">
+              {t.sectionOne.markerValue}
             </div>
           </Reveal>
 
