@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* Police hébergée localement (public/fonts) — plus aucune dépendance CDN */
+@font-face {
+  font-family: "Flexo Soft Medium";
+  src: url("/fonts/flexo-soft-medium.woff2") format("woff2"),
+       url("/fonts/flexo-soft-medium.woff") format("woff");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
   --font-sans: "Flexo Soft Medium", system-ui, sans-serif;
   --font-mono: "Flexo Soft Medium", system-ui, sans-serif;
